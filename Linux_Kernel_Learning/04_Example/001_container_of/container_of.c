@@ -16,7 +16,7 @@ int main()
     classmate.age = 18;
     classmate.name = "Shirley";
 
-    char *name_p = &classmate.name;
+    char **name_p = &classmate.name;
     struct person *girl = container_of(name_p, struct person, name);
     printf("The girl's name is %s\n", girl->name);
     return 0;
