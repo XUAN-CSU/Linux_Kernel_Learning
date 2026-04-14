@@ -10,6 +10,7 @@
 #include <linux/init.h>
 #include <linux/usb.h>
 #include <linux/notifier.h>
+#include <linux/kdev_t.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("chatgpt");
@@ -27,6 +28,14 @@ static int usb_event_notify(struct notifier_block *nb, unsigned long action, voi
                     le16_to_cpu(udev->descriptor.idVendor),
                     le16_to_cpu(udev->descriptor.idProduct),
                     udev->devnum);
+            if (udev->dev.devt) {
+                unsigned int major = MAJOR(udev->dev.devt);
+                unsigned int minor = MINOR(udev->dev.devt);
+                pr_info("WLC USB_MON: Major : %u, Minor : %u\n", major, minor);
+                pr_info("WLC USB_MON: Node : /dev/bus/usb/%03d/%03d\n", udev->bus->busnum, udev->devnum);
+            } else {
+                pr_info("WLC can't find the Major and Minor\n");
+            }
         } else {
             pr_info("WLC USB_MON: USB_DEVICE_ADD (no device ptr)\n");
         }
