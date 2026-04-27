@@ -45,24 +45,56 @@ static const struct file_operations eep_fops = {
 
 static int __init register_char_device_init(void)
 {
-    int i;
+    int i, ret;
     dev_t curr_dev;
-    alloc_chrdev_region(&dev_num, 0, EEP_NBANK, EEP_DEVICE_NAME);
+
+    ret = alloc_chrdev_region(&dev_num, 0, EEP_NBANK, EEP_DEVICE_NAME);
+    if (ret < 0) {
+        pr_err("Failed to allocate chrdev region\n");
+        return ret;
+    }
 
     eep_class = class_create(EEP_CLASS);
+    if (IS_ERR(eep_class)) {
+        pr_err("Failed to create class\n");
+        unregister_chrdev_region(dev_num, EEP_NBANK);
+        return PTR_ERR(eep_class);
+    }
 
-    for (int i = 0; i < EEP_NBANK; ++i) {
+    for (i = 0; i < EEP_NBANK; ++i) {
         cdev_init(&eep_cdev[i], &eep_fops);
         eep_cdev[i].owner = THIS_MODULE;
         
         curr_dev = MKDEV(MAJOR(dev_num), MINOR(dev_num) + i);
-        cdev_add(&eep_cdev[i], curr_dev, 1);
-        device_create(eep_class, NULL, curr_dev, NULL, EEP_DEVICE_NAME "%d", i);
+
+        ret = cdev_add(&eep_cdev[i], curr_dev, 1);
+        if (ret < 0) {
+            pr_err("Failed to add cdev for bank %d\n", i);
+            goto err_cdev_add;
+        }
+
+        if (device_create(eep_class, NULL, curr_dev, NULL,
+                          EEP_DEVICE_NAME "%d", i) == NULL) {
+            pr_err("Failed to create device for bank %d\n", i);
+            cdev_del(&eep_cdev[i]);
+            goto err_cdev_add;
+        }
     }
 
-    printk(KERN_INFO "WLC load\n");
+    pr_info("WLC load\n");
 
     return 0;
+
+err_cdev_add:
+    /* Roll back all previously added cdevs */
+    for (--i; i >= 0; --i) {
+        curr_dev = MKDEV(MAJOR(dev_num), MINOR(dev_num) + i);
+        device_destroy(eep_class, curr_dev);
+        cdev_del(&eep_cdev[i]);
+    }
+    class_destroy(eep_class);
+    unregister_chrdev_region(dev_num, EEP_NBANK);
+    return ret;
 }
 
 static void __exit register_char_device_exit(void)
@@ -86,8 +118,7 @@ static void __exit register_char_device_exit(void)
     /* Release device numbers */
     unregister_chrdev_region(dev_num, EEP_NBANK);
 
-    printk(KERN_INFO "WLC unload\n");
-
+    pr_info("WLC unload\n");
 }
 
 module_init(register_char_device_init);
